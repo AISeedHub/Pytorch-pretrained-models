@@ -1,11 +1,11 @@
 import torch
 from torchvision.utils import make_grid, draw_bounding_boxes, draw_segmentation_masks
 import torch.nn.functional as F
-from Detector import WrappingDetector
-from Classifier import WrappingClassifier
-from ultis import *
+from Modules.Detector import WrappingDetector
+from Modules.Classifier import WrappingClassifier
+from Modules.ultis import *
 from pytorch_lightning import LightningModule
-from Dataloader import DataModule
+from Modules.Dataloader import DataModule
 from neptune.types import File
 
 seed_everything(44)
