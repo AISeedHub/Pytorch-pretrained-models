@@ -6,7 +6,7 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
 from torchmetrics.classification import Accuracy, Dice
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-
+import cv2
 
 def seed_everything(SEED=42):
     random.seed(SEED)
@@ -203,3 +203,32 @@ def get_trainer(settings, logger):
         callbacks=callbacks,
     )
     return trainer
+
+def draw_classification_labels(patch, labels, class_list=None, font_size=1, thikness=1, color=(0, 255, 0)):
+    '''
+    Draw labels on image
+    Args:
+        img: image
+        labels: labels
+        class_list: class list
+    Returns:
+        img: image with labels
+    '''
+    images = patch.numpy().transpose(0, 2, 3, 1)
+    draw_images = images.copy()
+    
+    for image, label in zip(draw_images, labels):
+        if(class_list is None):
+            name = str(label.item())
+        else:
+            name = class_list[int(label.item())]
+        cv2.putText(image, name, (50, 100), cv2.FONT_HERSHEY_SIMPLEX, font_size, color, thikness)
+        
+    return torch.from_numpy(draw_images.transpose(0, 3, 1, 2))
+
+if __name__ == "__main__":
+
+    patch = torch.rand(2, 3, 128, 128)
+    labels = torch.rand(2)
+    class_list = ['cat', 'dog']
+    patch = draw_classification_labels(patch, labels, class_list)

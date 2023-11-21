@@ -132,7 +132,8 @@ class ClassifierModel(ModelBase):
     
     def log_result(self, outputs):
         images, predictions, targets = outputs["image"], outputs["predictions"], outputs["targets"]
-        reconstructions = images
+        predictions = torch.argmax(predictions, dim=1)
+        reconstructions = draw_classification_labels(images, predictions, ['0', '1'], font_size=3, thikness=5)
         reconstructions = make_grid(reconstructions, nrow= int(self.train_settings['n_batch'] ** 0.5))
         reconstructions = reconstructions.numpy().transpose(1, 2, 0) / 255
 
