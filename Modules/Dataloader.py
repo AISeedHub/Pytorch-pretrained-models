@@ -138,7 +138,7 @@ class DataModule(LightningDataModule):
                           num_workers=self.num_workers, collate_fn=self.collate_fn)
 
     def val_dataloader(self):
-        return DataLoader(self.Val_dataset, batch_size=self.batch_size, shuffle=False, 
+        return DataLoader(self.Val_dataset, batch_size=self.batch_size, shuffle=True, 
                           num_workers=self.num_workers, collate_fn=self.collate_fn)
     
     def test_dataloader(self):

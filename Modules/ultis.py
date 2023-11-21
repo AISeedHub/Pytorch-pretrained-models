@@ -156,18 +156,19 @@ def get_basic_callbacks(settings):
     '''
     lr_callback = LearningRateMonitor(logging_interval='epoch')
     last_ckpt_callback = ModelCheckpoint(
-        filename='last_model_{epoch:03d}',
+        filename='last_{epoch:03d}',
         auto_insert_metric_name=False,
         save_top_k=1,
         monitor=None,
     )
     best_ckpt_calllback = ModelCheckpoint(
-        filename='best_model_{epoch:03d}',
+        filename='best_{epoch:03d}',
         auto_insert_metric_name=False,
         save_top_k=1,
         monitor=f'metrics/epoch/val_{settings["metric"]}',
         mode='max',
-        verbose=True
+        verbose=True,
+        save_weights_only=True,
     )
     if settings['early_stopping']:
         early_stopping_callback = EarlyStopping(
