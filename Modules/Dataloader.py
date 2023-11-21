@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
 from torchvision.transforms._presets import ObjectDetection
+from torchvision.transforms._presets import ImageClassification
 from functools import partial
 import numpy as np
 import os
@@ -29,113 +30,61 @@ class Standardize(object):
     def __repr__(self):
         return self.__class__.__name__ + '()'
 
-class base_dataset(Dataset):
+
+
+class ClassificationDataset(Dataset):
     '''
     mode: 'train', 'val', 'test'
     data_path: path to data folder
     imgsize: size of image
     transform: transform function
     '''
+    portion = {
+            "train": [0, 0.8],
+            "val": [0.8, 0.9],
+            "test": [0.9, 1]
+        }
     def __init__(self, mode, data_path, imgsize=224, transform=None):
+        super().__init__()
+        self.transform = transform
+        self.imgsize = imgsize
         self.data_path = data_path
         self.mode = mode
         self.transform = transform
-        self.img_list = None
-        self.label_list = None
+        self.img_list = []
+        self.label_list = []
 
+        self.class_list = os.listdir(data_path)
+        self.class_list.sort()
+        self.num_class = len(self.class_list)
+
+
+        for i in range(self.num_class):
+            img_list = os.listdir(os.path.join(data_path, self.class_list[i]))
+            data_range_below = int(ClassificationDataset.portion[mode][0] * len(img_list))
+            data_range_above = int(ClassificationDataset.portion[mode][1] * len(img_list))
+            self.img_list += [os.path.join(data_path, self.class_list[i], img) for img in img_list[data_range_below:data_range_above]]
+            self.label_list += [i] * (data_range_above - data_range_below)
+
+        if(self.transform is None):
+            self.transform = ImageClassification(crop_size=imgsize)
+    
     def __len__(self):
         return len(self.img_list)
     
     def __getitem__(self, index):
         '''
-        return tran_image, target, original image
+        return train_image, target, original image
         '''
-        image = self.img_list[index]
+        img_path = self.img_list[index]
+        # check image_path exists
+        if(not os.path.exists(img_path)):
+            raise Exception("Image path does not exist")
+        image = Image.open(img_path).convert("RGB")
         label = self.label_list[index]
         trans_img = self.transform(image)
-        return trans_img, label, image
-      
-       
-class PennFudanDataset(torch.utils.data.Dataset):
-    def __init__(self, mode, data_path, imgsize=224, transform=None):
-        self.root = data_path
-        self.transform = transform
-        # load all image files, sorting them to
-        # ensure that they are aligned
-        imgs = list(sorted(os.listdir(os.path.join(data_path, "PNGImages"))))
-        masks = list(sorted(os.listdir(os.path.join(data_path, "PedMasks"))))
 
-        n = len(imgs)
-        if(mode == 'train'):
-            self.imgs = imgs[:int(n*0.8)]
-            self.masks = masks[:int(n*0.8)]
-        elif(mode == 'val'):
-            self.imgs = imgs[int(n*0.8):]
-            self.masks = masks[int(n*0.8):]
-        elif(mode == 'test'):
-            self.imgs = imgs[int(n*0.8):]
-            self.masks = masks[int(n*0.8):]
-
-        if(self.transform is None):
-            self.transform = partial(ObjectDetection)()
-    
-    def __len__(self):
-        return len(self.imgs)
-
-    def __getitem__(self, idx):
-        # load images and masks
-        img_path = os.path.join(self.root, "PNGImages", self.imgs[idx])
-        mask_path = os.path.join(self.root, "PedMasks", self.masks[idx])
-        img = Image.open(img_path).convert("RGB")
-        # note that we haven't converted the mask to RGB,
-        # because each color corresponds to a different instance
-        # with 0 being background
-        mask = Image.open(mask_path)
-        # convert the PIL Image into a numpy array
-        mask = np.array(mask)
-        # instances are encoded as different colors
-        obj_ids = np.unique(mask)
-        # first id is the background, so remove it
-        obj_ids = obj_ids[1:]
-
-        # split the color-encoded mask into a set
-        # of binary masks
-        masks = mask == obj_ids[:, None, None]
-
-        # get bounding box coordinates for each mask
-        num_objs = len(obj_ids)
-        boxes = []
-        for i in range(num_objs):
-            pos = np.nonzero(masks[i])
-            xmin = np.min(pos[1])
-            xmax = np.max(pos[1])
-            ymin = np.min(pos[0])
-            ymax = np.max(pos[0])
-            boxes.append([xmin, ymin, xmax, ymax])
-
-        # convert everything into a torch.Tensor
-        boxes = torch.as_tensor(boxes, dtype=torch.float32)
-        # there is only one class
-        labels = torch.ones((num_objs,), dtype=torch.int64)
-        masks = torch.as_tensor(masks, dtype=torch.uint8)
-
-        image_id = torch.tensor([idx])
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        # suppose all instances are not crowd
-        iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
-
-        target = {}
-        target["boxes"] = boxes
-        target["labels"] = labels
-        target["masks"] = masks
-        target["image_id"] = image_id
-        target["area"] = area
-        target["iscrowd"] = iscrowd
-
-        trans_img = self.transform(img)
-
-        return trans_img, target, transforms.ToTensor()(img)
-       
+        return trans_img, label, transforms.ToTensor()(image)
 
     
 class DataModule(LightningDataModule):
@@ -147,37 +96,42 @@ class DataModule(LightningDataModule):
     Returns:
         Train/Test/Val data loader
     '''
-    def __init__(self, data_settings, training_settings, transform=[None, None]):
+    DATALOADER = {
+        "ImageClassification": ClassificationDataset,
+    }
+    def __init__(self, data_settings, training_settings, transform=[None, None], collate_fn=None):
         super().__init__()
 
-        self.dataset = data_settings['name']
+        assert data_settings['name'] in DataModule.DATALOADER.keys(), \
+            "Data name should be one of {}".format(DataModule.DATALOADER.keys())
+
+        self.dataset = DataModule.DATALOADER[data_settings['name']]
         self.root_dir = data_settings['path']
         self.img_size = data_settings['img_size']
         self.batch_size = training_settings['n_batch']
         self.num_workers = training_settings['num_workers']
 
-        self.data_class = {
-            "PennFudan": PennFudanDataset,
-        }
         self.class_list = None
-        self.collate_fn = None
-        if(self.dataset in ["Apple", "PennFudan"]):
-            self.collate_fn = collate_fn
+        self.collate_fn = collate_fn
 
         self.train_transform, self.val_transform = transform
         
     def setup(self, stage: str):
 
         if stage == "fit":
-            self.Train_dataset = self.data_class[self.dataset](mode="train", data_path=self.root_dir,
+            self.Train_dataset = self.dataset(mode="train", data_path=self.root_dir,
                                                 imgsize=self.img_size, transform=self.train_transform)
-            self.Val_dataset = self.data_class[self.dataset](mode="val", data_path=self.root_dir,
+            self.Val_dataset = self.dataset(mode="val", data_path=self.root_dir,
                                                 imgsize=self.img_size, transform=self.val_transform)
+            
+            self.class_list = self.Train_dataset.class_list
                 
         # Assign test dataset for use in dataloader(s)
         if stage == "test":
-            self.Test_dataset = self.data_class[self.dataset](mode="test", data_path=self.root_dir,
+            self.Test_dataset = self.dataset(mode="test", data_path=self.root_dir,
                                                 imgsize=self.img_size, transform=self.val_transform)
+            
+            self.class_list = self.Test_dataset.class_list
            
     def train_dataloader(self):
         return DataLoader(self.Train_dataset, batch_size=self.batch_size, shuffle=True, 
@@ -190,3 +144,17 @@ class DataModule(LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.Test_dataset, batch_size=self.batch_size, shuffle=False, 
                           num_workers=self.num_workers, collate_fn=self.collate_fn)
+
+if __name__  == "__main__":
+
+    bottle_dataset = DataModule(data_settings={"name": "ImageClassification", "path": "E:\code\AISeed\Bottle-Pi\dataset", "img_size": 224},
+                                training_settings={"n_batch": 4, "num_workers": 4},
+                                transform=[None, None])
+    
+    bottle_dataset.setup("fit")
+    
+    for bottle in bottle_dataset.train_dataloader():
+        print(bottle)
+        break
+    print(bottle_dataset.class_list)
+    

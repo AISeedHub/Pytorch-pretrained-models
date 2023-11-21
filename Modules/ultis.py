@@ -72,7 +72,7 @@ def get_metric(metric_name, num_classes):
         metric: metric function
     '''
     if metric_name == 'acc':
-        metric = Accuracy(num_classes=num_classes)
+        metric = Accuracy(num_classes=num_classes, task='multiclass')
     elif metric_name == 'mAP':
         metric = CustomMAP()
     elif metric_name == 'dice':

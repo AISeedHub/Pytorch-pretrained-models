@@ -10,16 +10,16 @@ architect_settings:
                 is_full: false
                 is_pretrained: true
                 is_freeze: false
-        n_cls: 10
+        n_cls: 2
 dataset_settings:
-        name: CIFAR10
-        path: data/
+        name: ImageClassification
+        path: E:\code\AISeed\Bottle-Pi\dataset
         img_size: 224
 training_settings: 
         gpu_ids: [0]
         n_gpu: 1
         loss: ce
-        metric: accuracy
+        metric: acc
         ckpt_path: "./mode/test"
         n_epoch: 5
         n_batch: 64
